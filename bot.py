@@ -7,7 +7,6 @@ import requests
 
 from aiogram import Bot, Dispatcher
 from aiogram import F
-from aiogram import types
 from aiogram.types import (
     Message,
     InlineKeyboardMarkup,
@@ -124,7 +123,6 @@ async def balance_handler(message: Message):
     await message.answer(text)
 
 
-
 @dp.message(Command("add_wallet"))
 async def add_wallet_handler(message: Message):
     """Обробляє команду /add_wallet: якщо аргументи є – додає гаманець, якщо ні – надсилає підказку"""
@@ -133,7 +131,11 @@ async def add_wallet_handler(message: Message):
     if len(parts) < 3:  # Якщо команда викликана без параметрів
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="📋 Скопіювати команду", callback_data="copy_add_wallet")]
+                [
+                    InlineKeyboardButton(
+                        text="📋 Скопіювати команду", callback_data="copy_add_wallet"
+                    )
+                ]
             ]
         )
 
@@ -157,14 +159,14 @@ async def add_wallet_handler(message: Message):
     else:
         await message.answer("⚠️ Гаманець з такою адресою вже існує.")
 
+
 @dp.callback_query(lambda c: c.data == "copy_add_wallet")
 async def copy_add_wallet_callback(callback_query):
     """Надсилає команду /add_wallet користувачу у чат"""
-    await bot.send_message(
-        callback_query.from_user.id,
-        "/add_wallet Назва Адреса"
+    await bot.send_message(callback_query.from_user.id, "/add_wallet Назва Адреса")
+    await bot.answer_callback_query(
+        callback_query.id, text="✅ Команда надіслана у ваш чат!"
     )
-    await bot.answer_callback_query(callback_query.id, text="✅ Команда надіслана у ваш чат!")
 
 
 # 📌 Відображення списку гаманців + кнопки видалення
@@ -193,6 +195,7 @@ async def wallets_handler(message: Message):
             reply_markup=keyboard,
         )
 
+
 @dp.message(Command("delete_wallet"))
 async def delete_wallet_prompt(message: Message):
     user_id = message.from_user.id
@@ -209,7 +212,10 @@ async def delete_wallet_prompt(message: Message):
         ]
     )
 
-    await message.answer("📌 **Оберіть гаманець для видалення:**", reply_markup=keyboard)
+    await message.answer(
+        "📌 **Оберіть гаманець для видалення:**", reply_markup=keyboard
+    )
+
 
 # 📌 Видалення гаманця
 @dp.callback_query(lambda c: c.data.startswith("delete:"))
@@ -242,26 +248,39 @@ async def subscribe_handler(message: Message):
 async def check_wallets():
     """Перевіряє баланси всіх гаманців та надсилає сповіщення підписникам"""
     wallets = await get_all_wallets()  # Отримуємо всі гаманці
+    logging.info(f"🔄 Початок перевірки балансів, знайдено {len(wallets)} гаманців")
 
     for name, address, last_balance in wallets:
         new_balance = get_trx_balance(address)  # Отримуємо актуальний баланс через API
+        logging.info(
+            f"🔍 Гаманець {name} ({address}): старий баланс {last_balance} TRX, новий баланс {new_balance} TRX"
+        )
 
         if new_balance > last_balance:  # Перевіряємо, чи був депозит
             diff = new_balance - last_balance
-            message = f"📥 Поповнення!\n🔹 **{name}**\n📍 `{address}`\n💰 +{diff} TRX (новий баланс: {new_balance} TRX)"
+            message = (
+                f"📥 Поповнення!\n"
+                f"🔹 **{name}**\n"
+                f"📍 `{address}`\n"
+                f"💰 +{diff} TRX (новий баланс: {new_balance} TRX)"
+            )
 
             # Отримуємо список підписаних користувачів
             subscribers = await get_subscribers()
+            logging.info(f"✉ Надсилаємо сповіщення {len(subscribers)} підписникам")
+
             for user_id in subscribers:
                 try:
                     await bot.send_message(user_id, message)
+                    logging.info(f"✅ Повідомлення надіслано користувачу {user_id}")
                 except Exception as e:
-                    print(
-                        f"⚠️ Не вдалося надіслати повідомлення користувачу {user_id}: {e}"
+                    logging.error(
+                        f"⚠️ Помилка надсилання повідомлення користувачу {user_id}: {e}"
                     )
 
             # Оновлюємо баланс у базі
             await update_balance(address, new_balance)
+            logging.info(f"🔄 Оновлено баланс у базі для {name} ({address})")
 
 
 @dp.message(Command("total_balance"))
@@ -311,6 +330,7 @@ async def set_admin_handler(message: Message):
     new_admin_id = int(parts[1])
 
     from database import is_user_exists
+
     if not await is_user_exists(new_admin_id):
         await message.answer(
             f"⚠️ Користувач `{new_admin_id}` не знайдений у базі. Переконайтесь, що він запустив бота."
@@ -319,6 +339,7 @@ async def set_admin_handler(message: Message):
 
     await add_admin(new_admin_id)
     await message.answer(f"✅ Користувач `{new_admin_id}` тепер є адміністратором!")
+
 
 async def scheduled_checker():
     """Перевіряє баланси гаманців та надсилає сповіщення про поповнення кожні 5 хвилин"""
@@ -336,9 +357,11 @@ async def subscribe_handler(message: Message):
     await add_subscriber(user_id)
     await message.answer("✅ Ви підписані на сповіщення про поповнення!")
 
+
 @dp.message(F.text == "📋 Мої гаманці")
 async def show_wallets(message: Message):
     await wallets_handler(message)
+
 
 @dp.message(F.text == "💰 Баланс")
 async def show_balance(message: Message):
@@ -346,9 +369,11 @@ async def show_balance(message: Message):
     print("🔍 Натиснуто кнопку: Баланс")
     await balance_handler(message)
 
+
 @dp.message(F.text == "📊 Загальний баланс")
 async def total_balance_button(message: Message):
     await total_balance_handler(message)
+
 
 # 📌 Обробка кнопок головного меню
 @dp.message(lambda message: message.text == "📋 Мої гаманці")
@@ -381,7 +406,11 @@ async def set_admin_button(message: Message):
 async def add_wallet_button(message: Message):
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📋 Скопіювати команду", callback_data="copy_add_wallet")]
+            [
+                InlineKeyboardButton(
+                    text="📋 Скопіювати команду", callback_data="copy_add_wallet"
+                )
+            ]
         ]
     )
 
@@ -390,13 +419,15 @@ async def add_wallet_button(message: Message):
         "`/add_wallet Назва Адреса`\n\n"
         "📌 **Натисніть кнопку нижче, щоб отримати команду для копіювання!**",
         reply_markup=keyboard,
-        parse_mode="Markdown"
+        parse_mode="Markdown",
     )
+
 
 @dp.message(F.text == "🔔 Підписатися на сповіщення")
 async def subscribe_button_handler(message: Message):
     """Обробляє натискання кнопки '🔔 Підписатися на сповіщення'"""
     await subscribe_handler(message)
+
 
 async def main():
     await update_db_schema()  # Додаємо колонку is_subscribed
