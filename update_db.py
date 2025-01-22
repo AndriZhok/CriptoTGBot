@@ -1,19 +1,16 @@
 import aiosqlite
 
-
 async def update_db_schema():
-    """Перевіряє, чи існує колонка `last_balance`, перш ніж додавати її"""
+    """Перевіряє, чи існують необхідні колонки та додає їх, якщо вони відсутні"""
     async with aiosqlite.connect("wallets.db") as db:
-        cursor = await db.execute("PRAGMA table_info(wallets)")
-        columns = [
-            column[1] for column in await cursor.fetchall()
-        ]  # Отримуємо список назв стовпців
+        cursor = await db.execute("PRAGMA table_info(users)")
+        columns = [column[1] for column in await cursor.fetchall()]
 
-        if "last_balance" not in columns:
-            await db.execute(
-                "ALTER TABLE wallets ADD COLUMN last_balance REAL DEFAULT 0"
-            )
+        # Додаємо колонку `is_approved`, якщо її немає
+        if "is_approved" not in columns:
+            await db.execute("ALTER TABLE users ADD COLUMN is_approved INTEGER DEFAULT 0")
             await db.commit()
-            print("✅ Колонка `last_balance` додана")
+            print("✅ Колонка `is_approved` додана")
+
         else:
-            print("⚠️ Колонка `last_balance` вже існує, оновлення не потрібно")
+            print("⚠️ Колонка `is_approved` вже існує, оновлення не потрібно")

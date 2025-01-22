@@ -11,7 +11,8 @@ async def init_db():
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY,
             is_admin INTEGER DEFAULT 0,
-            subscribed INTEGER DEFAULT 0
+            subscribed INTEGER DEFAULT 0,
+            is_approved INTEGER DEFAULT 0
         )
         """
         )
@@ -165,3 +166,39 @@ async def is_user_exists(user_id: int) -> bool:
         )
         result = await cursor.fetchone()
         return result[0] > 0  # Якщо хоча б один запис знайдено, повертаємо True
+
+async def is_user_approved(user_id):
+    """Перевіряє, чи схвалений користувач адміністратором"""
+    async with aiosqlite.connect(DB_NAME) as db:
+        cursor = await db.execute("SELECT is_approved FROM users WHERE user_id = ?", (user_id,))
+        row = await cursor.fetchone()
+        return row and row[0] == 1  # Повертає True, якщо is_approved = 1
+
+
+async def approve_user(user_id: int):
+    """Адмін схвалює користувача"""
+    async with aiosqlite.connect("wallets.db") as db:
+        await db.execute("UPDATE users SET is_approved = 1 WHERE user_id = ?", (user_id,))
+        await db.commit()
+
+
+async def add_user(user_id: int, username: str):
+    """Додає нового користувача в базу, якщо його ще немає"""
+    async with aiosqlite.connect(DB_NAME) as db:
+        await db.execute(
+            "INSERT OR IGNORE INTO users (user_id, username, is_approved) VALUES (?, ?, 0)",
+            (user_id, username),
+        )
+        await db.commit()
+
+async def get_pending_users():
+    """Отримує всіх користувачів, які ще не схвалені"""
+    async with aiosqlite.connect(DB_NAME) as db:
+        cursor = await db.execute("SELECT user_id, username FROM users WHERE is_approved = 0")
+        return await cursor.fetchall()
+
+async def remove_user(user_id):
+    """Видаляє користувача з бази даних"""
+    async with aiosqlite.connect(DB_NAME) as db:
+        await db.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
+        await db.commit()
