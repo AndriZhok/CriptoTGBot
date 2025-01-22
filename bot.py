@@ -42,7 +42,6 @@ logging.basicConfig(level=logging.INFO)
 # Ініціалізація бота та диспетчера
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
-print(f"✅ Loaded TOKEN: {TOKEN}")
 
 # Головне меню (оновлене)
 async def get_main_menu(user_id):
@@ -61,8 +60,6 @@ async def get_main_menu(user_id):
     else:
         return ReplyKeyboardMarkup(
             keyboard=[
-                [KeyboardButton(text="📋 Мої гаманці"), KeyboardButton(text="💰 Баланс")],
-                [KeyboardButton(text="📊 Загальний баланс")],
                 [KeyboardButton(text="🔔 Підписатися на сповіщення")],
             ],
             resize_keyboard=True,
@@ -82,6 +79,19 @@ async def check_access(message: Message):
         await message.answer("❌ У вас немає доступу до бота. Дочекайтеся схвалення адміністратора.")
         return False
     return True
+
+
+def get_trx_to_usdt_rate():
+    """Отримує поточний курс TRX до USDT через API Binance"""
+    url = "https://api.binance.com/api/v3/ticker/price?symbol=TRXUSDT"
+    try:
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        return float(data["price"])  # Отримуємо курс TRX/USDT
+    except requests.RequestException as e:
+        print(f"❌ Помилка отримання курсу TRX/USDT: {e}")
+        return 0
 
 # 📌 Обробник команди /start
 @dp.message(Command("start"))
@@ -136,6 +146,7 @@ def get_trx_balance(address):
 async def balance_handler(message: Message):
     if not await check_access(message):
         return
+
     """Перевіряє баланс усіх гаманців користувача та оновлює його в базі"""
     user_id = message.from_user.id
     wallets = await get_user_wallets(user_id)
@@ -144,11 +155,25 @@ async def balance_handler(message: Message):
         await message.answer("⚠️ У вас немає збережених гаманців.")
         return
 
+    trx_to_usdt = get_trx_to_usdt_rate()  # Отримуємо курс TRX/USDT
+    if trx_to_usdt == 0:
+        await message.answer("⚠️ Не вдалося отримати курс TRX/USDT. Спробуйте пізніше.")
+        return
+
     text = "📊 **Ваші гаманці та баланси:**\n"
+    total_trx = 0
+
     for name, address, last_balance in wallets:
-        balance = get_trx_balance(address)  # Отримуємо актуальний баланс
+        balance = get_trx_balance(address)  # Отримуємо актуальний баланс TRX
         await update_balance(address, balance)  # 🔹 Оновлюємо баланс у БД
-        text += f"🔹 {name}: `{address}` → {balance} TRX\n"
+        balance_usdt = balance * trx_to_usdt  # Конвертуємо TRX → USDT
+        total_trx += balance
+
+        text += f"🔹 {name}: `{address}`\n" \
+                f"💰 {balance:.2f} TRX ≈ {balance_usdt:.2f} USDT\n\n"
+
+    total_usdt = total_trx * trx_to_usdt
+    text += f"\n💰 **Загальний баланс:** {total_trx:.2f} TRX ≈ {total_usdt:.2f} USDT"
 
     await message.answer(text)
 
@@ -203,9 +228,10 @@ async def copy_add_wallet_callback(callback_query):
 # 📌 Відображення списку гаманців + кнопки видалення
 @dp.message(Command("wallets"))
 async def wallets_handler(message: Message):
-    """Відображає список гаманців тільки для цього користувача"""
+    """Відображає список гаманців користувача з балансом у TRX та USDT з можливістю видалення"""
     if not await check_access(message):
         return
+
     user_id = message.from_user.id
     wallets = await get_user_wallets(user_id)
 
@@ -213,58 +239,50 @@ async def wallets_handler(message: Message):
         await message.answer("⚠️ У вас немає збережених гаманців.")
         return
 
+    trx_to_usdt = get_trx_to_usdt_rate()  # Отримуємо актуальний курс TRX/USDT
+    if trx_to_usdt == 0:
+        await message.answer("⚠️ Не вдалося отримати курс TRX/USDT. Спробуйте пізніше.")
+        return
+
     for name, address, last_balance in wallets:
+        balance = get_trx_balance(address)  # Отримуємо актуальний баланс TRX
+        await update_balance(address, balance)  # Оновлюємо баланс у БД
+        balance_usdt = balance * trx_to_usdt  # Конвертуємо TRX → USDT
+
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
                     InlineKeyboardButton(
-                        text="🗑 Видалити", callback_data=f"delete:{name}"
+                        text="🗑 Видалити", callback_data=f"delete_wallet:{address}"
                     )
                 ]
             ]
         )
+
         await message.answer(
-            f"📌 {name}: `{address}` (Баланс: {last_balance} TRX)",
+            f"📌 **{name}**\n"
+            f"📍 `{address}`\n"
+            f"💰 {balance:.2f} TRX ≈ {balance_usdt:.2f} USDT",
             reply_markup=keyboard,
+            parse_mode="Markdown",
         )
 
 
-@dp.message(Command("delete_wallet"))
-async def delete_wallet_prompt(message: Message):
-    if not await check_access(message):
-        return
-    user_id = message.from_user.id
-    wallets = await get_user_wallets(user_id)
+@dp.callback_query(lambda c: c.data.startswith("delete_wallet:"))
+async def delete_wallet_callback(callback_query: types.CallbackQuery):
+    """Обробник кнопки видалення гаманця"""
+    user_id = callback_query.from_user.id
+    address = callback_query.data.split(":")[1]
 
-    if not wallets:
-        await message.answer("⚠️ У вас немає збережених гаманців.")
-        return
+    success = await delete_wallet(user_id, address)
 
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=f"🗑 {name}", callback_data=f"delete:{name}")]
-            for name, _, _ in wallets
-        ]
-    )
+    if success:
+        await callback_query.message.edit_text(f"✅ Гаманець `{address}` видалено!")
+    else:
+        await callback_query.message.answer("⚠️ Помилка видалення гаманця. Можливо, він вже був видалений.")
 
-    await message.answer(
-        "📌 **Оберіть гаманець для видалення:**", reply_markup=keyboard
-    )
+    await callback_query.answer()  # Закриваємо сповіщення
 
-
-# @dp.callback_query(lambda c: c.data.startswith("delete:"))
-# async def delete_wallet_callback(callback_query):
-#     """Обробка натискання кнопки видалення"""
-#     user_id = callback_query.from_user.id
-#     name = callback_query.data.split(":")[1]
-#     success = await delete_wallet(user_id, name)
-#
-#     if success:
-#         await callback_query.message.edit_text(f"✅ Гаманець `{name}` видалено!")
-#     else:
-#         await callback_query.message.edit_text(
-#             f"⚠️ Гаманець `{name}` не знайдено або ви не маєте доступу."
-#         )
 
 
 @dp.message(Command("subscribe"))
@@ -282,6 +300,8 @@ async def subscribe_handler(message: Message):
 async def check_wallets():
     """Перевіряє баланси всіх гаманців та надсилає сповіщення підписникам"""
     wallets = await get_all_wallets()  # Отримуємо всі гаманці
+    trx_to_usdt = get_trx_to_usdt_rate()  # Отримуємо курс TRX → USDT
+
     logging.info(f"🔄 Початок перевірки балансів, знайдено {len(wallets)} гаманців")
 
     for name, address, last_balance in wallets:
@@ -290,14 +310,27 @@ async def check_wallets():
             f"🔍 Гаманець {name} ({address}): старий баланс {last_balance} TRX, новий баланс {new_balance} TRX"
         )
 
-        if new_balance > last_balance:  # Перевіряємо, чи був депозит
+        if new_balance != last_balance:  # Перевіряємо, чи змінився баланс
             diff = new_balance - last_balance
-            message = (
-                f"📥 Поповнення!\n"
-                f"🔹 **{name}**\n"
-                f"📍 `{address}`\n"
-                f"💰 +{diff} TRX (новий баланс: {new_balance} TRX)"
-            )
+            diff_usdt = diff * trx_to_usdt  # Конвертуємо зміну в USDT
+            balance_usdt = new_balance * trx_to_usdt  # Поточний баланс у USDT
+
+            if diff > 0:
+                message = (
+                    f"📥 **Поповнення!**\n"
+                    f"🔹 **{name}**\n"
+                    f"📍 `{address}`\n"
+                    f"💰 +{diff:.2f} TRX (+{diff_usdt:.2f} USDT)\n"
+                    f"🏦 Новий баланс: {new_balance:.2f} TRX ≈ {balance_usdt:.2f} USDT"
+                )
+            else:
+                message = (
+                    f"📤 **Зняття коштів!**\n"
+                    f"🔹 **{name}**\n"
+                    f"📍 `{address}`\n"
+                    f"💸 {diff:.2f} TRX ({diff_usdt:.2f} USDT)\n"
+                    f"🏦 Новий баланс: {new_balance:.2f} TRX ≈ {balance_usdt:.2f} USDT"
+                )
 
             # Отримуємо список підписаних користувачів
             subscribers = await get_subscribers()
@@ -316,10 +349,9 @@ async def check_wallets():
             await update_balance(address, new_balance)
             logging.info(f"🔄 Оновлено баланс у базі для {name} ({address})")
 
-
 @dp.message(Command("total_balance"))
 async def total_balance_handler(message: Message):
-    """Оновлює баланси та виводить всі гаманці"""
+    """Оновлює баланси та виводить всі гаманці у TRX та USDT"""
     if not await check_access(message):
         return
     user_id = message.from_user.id
@@ -327,17 +359,27 @@ async def total_balance_handler(message: Message):
         await message.answer("❌ У вас немає прав для цієї команди.")
         return
 
+    trx_to_usdt = get_trx_to_usdt_rate()  # Отримуємо курс TRX/USDT
+    if trx_to_usdt == 0:
+        await message.answer("⚠️ Не вдалося отримати курс TRX/USDT. Спробуйте пізніше.")
+        return
+
     wallets = await get_all_wallets()  # Отримуємо всі гаманці
-    total_balance = 0
+    total_trx = 0
     text = "📊 **Всі гаманці та їх баланси:**\n"
 
     for name, address, last_balance in wallets:
         balance = get_trx_balance(address)  # Отримуємо актуальний баланс
         await update_balance(address, balance)  # 🔹 Оновлюємо баланс у БД
-        total_balance += balance
-        text += f"🔹 {name}: `{address}` → {balance} TRX\n"
+        balance_usdt = balance * trx_to_usdt  # Конвертуємо TRX → USDT
+        total_trx += balance
 
-    text += f"\n💰 **Загальний баланс:** {total_balance} TRX"
+        text += f"🔹 {name}: `{address}`\n" \
+                f"💰 {balance:.2f} TRX ≈ {balance_usdt:.2f} USDT\n\n"
+
+    total_usdt = total_trx * trx_to_usdt
+    text += f"\n💰 **Загальний баланс:** {total_trx:.2f} TRX ≈ {total_usdt:.2f} USDT"
+
     await message.answer(text)
 
 
@@ -555,6 +597,21 @@ async def subscribe_button_handler(message: Message):
     """Обробляє натискання кнопки '🔔 Підписатися на сповіщення'"""
     await subscribe_handler(message)
 
+
+@dp.callback_query(lambda c: c.data.startswith("delete_wallet:"))
+async def delete_wallet_callback(callback_query: types.CallbackQuery):
+    """Обробник кнопки видалення гаманця"""
+    user_id = callback_query.from_user.id
+    address = callback_query.data.split(":")[1]
+
+    success = await delete_wallet(user_id, address)
+
+    if success:
+        await callback_query.message.edit_text(f"✅ Гаманець `{address}` видалено!")
+    else:
+        await callback_query.message.answer("⚠️ Помилка видалення гаманця. Можливо, він вже був видалений.")
+
+    await callback_query.answer()  # Закриваємо сповіщення
 
 async def main():
     await update_db_schema()  # Додаємо колонку is_subscribed

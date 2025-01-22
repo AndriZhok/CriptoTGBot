@@ -80,14 +80,15 @@ async def update_db_schema():
         print("✅ Схема бази даних оновлена!")
 
 
-async def delete_wallet(user_id: int, name: str):
-    """Видаляє гаманець користувача за назвою"""
-    async with aiosqlite.connect(DB_NAME) as db:
+async def delete_wallet(user_id, address):
+    """Видаляє гаманець користувача з бази даних"""
+    async with aiosqlite.connect("wallets.db") as db:
         cursor = await db.execute(
-            "DELETE FROM wallets WHERE user_id = ? AND name = ?", (user_id, name)
+            "DELETE FROM wallets WHERE user_id = ? AND address = ?", (user_id, address)
         )
         await db.commit()
-        return cursor.rowcount > 0  # Повертає True, якщо гаманець був видалений
+        rows_deleted = cursor.rowcount
+        return rows_deleted > 0  # True, якщо щось видалено, False, якщо ні
 
 
 async def is_admin(user_id: int):
