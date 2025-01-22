@@ -704,9 +704,9 @@ async def main():
     await update_db_schema()  # Додаємо колонку is_subscribed
     print("✅ База даних оновлена!")
     print("✅ Бот запущено")
+    await ensure_default_admin()
     asyncio.create_task(scheduled_checker())
     await dp.start_polling(bot)
-    await ensure_default_admin()
 
 
 if __name__ == "__main__":
