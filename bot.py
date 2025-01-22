@@ -386,8 +386,9 @@ async def check_wallets():
 
             for user_id in subscribers:
                 try:
-                    await bot.send_message(user_id, message)
-                    logging.info(f"✅ Повідомлення надіслано користувачу {user_id}")
+                    if diff > 0 or await is_admin(user_id):  # 🔹 Відправляємо зняття тільки адмінам
+                        await bot.send_message(user_id, message)
+                        logging.info(f"✅ Повідомлення надіслано користувачу {user_id}")
                 except Exception as e:
                     logging.error(
                         f"⚠️ Помилка надсилання повідомлення користувачу {user_id}: {e}"
