@@ -28,7 +28,11 @@ from database import (
     is_admin,
     add_admin,
     update_db_schema,
-    add_subscriber, is_user_approved, approve_user, remove_subscriber, is_user_subscribed,
+    add_subscriber,
+    is_user_approved,
+    approve_user,
+    remove_subscriber,
+    is_user_subscribed,
 )
 
 
@@ -43,6 +47,7 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
+
 # Головне меню (оновлене)
 async def get_main_menu(user_id):
     """Формує головне меню відповідно до ролі користувача"""
@@ -50,21 +55,42 @@ async def get_main_menu(user_id):
     if await is_admin(user_id):
         return ReplyKeyboardMarkup(
             keyboard=[
-                [KeyboardButton(text="📋 Мої гаманці"), KeyboardButton(text="💰 Баланс")],
+                [
+                    KeyboardButton(text="📋 Мої гаманці"),
+                    KeyboardButton(text="💰 Баланс"),
+                ],
                 [KeyboardButton(text="➕ Додати гаманець")],
-                [KeyboardButton(text="📊 Загальний баланс"), KeyboardButton(text="⚡ Призначити адміністратора")],
-                [KeyboardButton(text="👥 Схвалити користувачів")],  # 🔹 Нова кнопка для адмінів
-                [KeyboardButton(text="🔕 Відписатися") if is_subscribed else KeyboardButton(text="🔔 Підписатися на сповіщення")],
+                [
+                    KeyboardButton(text="📊 Загальний баланс"),
+                    KeyboardButton(text="⚡ Призначити адміністратора"),
+                ],
+                [
+                    KeyboardButton(text="👥 Схвалити користувачів")
+                ],  # 🔹 Нова кнопка для адмінів
+                [
+                    (
+                        KeyboardButton(text="🔕 Відписатися")
+                        if is_subscribed
+                        else KeyboardButton(text="🔔 Підписатися на сповіщення")
+                    )
+                ],
             ],
             resize_keyboard=True,
         )
     else:
         return ReplyKeyboardMarkup(
             keyboard=[
-                [KeyboardButton(text="🔕 Відписатися") if is_subscribed else KeyboardButton(text="🔔 Підписатися на сповіщення")],
+                [
+                    (
+                        KeyboardButton(text="🔕 Відписатися")
+                        if is_subscribed
+                        else KeyboardButton(text="🔔 Підписатися на сповіщення")
+                    )
+                ],
             ],
             resize_keyboard=True,
         )
+
 
 @dp.message(F.text == "👥 Схвалити користувачів")
 async def approve_users_button_handler(message: Message):
@@ -76,7 +102,9 @@ async def check_access(message: Message):
     """Перевіряє, чи користувач має доступ до бота"""
     user_id = message.from_user.id
     if not await is_user_approved(user_id):
-        await message.answer("❌ У вас немає доступу до бота. Дочекайтеся схвалення адміністратора.")
+        await message.answer(
+            "❌ У вас немає доступу до бота. Дочекайтеся схвалення адміністратора."
+        )
         return False
     return True
 
@@ -93,19 +121,24 @@ def get_trx_to_usdt_rate():
         print(f"❌ Помилка отримання курсу TRX/USDT: {e}")
         return 0
 
+
 # 📌 Обробник команди /start
 @dp.message(Command("start"))
 async def start_handler(message: Message):
     """Обробляє команду /start з перевіркою доступу користувача"""
     user_id = message.from_user.id
-    username = message.from_user.username or f"user_{user_id}"  # Якщо username відсутній
+    username = (
+        message.from_user.username or f"user_{user_id}"
+    )  # Якщо username відсутній
 
     from database import add_user
 
     await add_user(user_id, username)  # Додаємо користувача в базу з username
 
     if not await is_user_approved(user_id):
-        await message.answer("❌ Доступ до бота заборонено. Дочекайтеся схвалення адміністратора.")
+        await message.answer(
+            "❌ Доступ до бота заборонено. Дочекайтеся схвалення адміністратора."
+        )
         return
 
     role = "адміністратор" if await is_admin(user_id) else "звичайний користувач"
@@ -169,8 +202,10 @@ async def balance_handler(message: Message):
         balance_usdt = balance * trx_to_usdt  # Конвертуємо TRX → USDT
         total_trx += balance
 
-        text += f"🔹 {name}: `{address}`\n" \
-                f"💰 {balance:.2f} TRX ≈ {balance_usdt:.2f} USDT\n\n"
+        text += (
+            f"🔹 {name}: `{address}`\n"
+            f"💰 {balance:.2f} TRX ≈ {balance_usdt:.2f} USDT\n\n"
+        )
 
     total_usdt = total_trx * trx_to_usdt
     text += f"\n💰 **Загальний баланс:** {total_trx:.2f} TRX ≈ {total_usdt:.2f} USDT"
@@ -193,7 +228,11 @@ async def add_wallet_handler(message: Message):
     if len(parts) < 3:  # Якщо команда викликана без параметрів
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="📋 Скопіювати команду", callback_data="copy_add_wallet")]
+                [
+                    InlineKeyboardButton(
+                        text="📋 Скопіювати команду", callback_data="copy_add_wallet"
+                    )
+                ]
             ]
         )
 
@@ -215,6 +254,7 @@ async def add_wallet_handler(message: Message):
         await message.answer(f"✅ Гаманець `{name}` (`{address}`) успішно додано!")
     else:
         await message.answer("⚠️ Гаманець з такою адресою вже існує.")
+
 
 @dp.callback_query(lambda c: c.data == "copy_add_wallet")
 async def copy_add_wallet_callback(callback_query):
@@ -279,10 +319,11 @@ async def delete_wallet_callback(callback_query: types.CallbackQuery):
     if success:
         await callback_query.message.edit_text(f"✅ Гаманець `{address}` видалено!")
     else:
-        await callback_query.message.answer("⚠️ Помилка видалення гаманця. Можливо, він вже був видалений.")
+        await callback_query.message.answer(
+            "⚠️ Помилка видалення гаманця. Можливо, він вже був видалений."
+        )
 
     await callback_query.answer()  # Закриваємо сповіщення
-
 
 
 @dp.message(Command("subscribe"))
@@ -356,6 +397,7 @@ async def check_wallets():
             await update_balance(address, new_balance)
             logging.info(f"🔄 Оновлено баланс у базі для {name} ({address})")
 
+
 @dp.message(Command("total_balance"))
 async def total_balance_handler(message: Message):
     """Оновлює баланси та виводить всі гаманці у TRX та USDT"""
@@ -381,8 +423,10 @@ async def total_balance_handler(message: Message):
         balance_usdt = balance * trx_to_usdt  # Конвертуємо TRX → USDT
         total_trx += balance
 
-        text += f"🔹 {name}: `{address}`\n" \
-                f"💰 {balance:.2f} TRX ≈ {balance_usdt:.2f} USDT\n\n"
+        text += (
+            f"🔹 {name}: `{address}`\n"
+            f"💰 {balance:.2f} TRX ≈ {balance_usdt:.2f} USDT\n\n"
+        )
 
     total_usdt = total_trx * trx_to_usdt
     text += f"\n💰 **Загальний баланс:** {total_trx:.2f} TRX ≈ {total_usdt:.2f} USDT"
@@ -415,6 +459,7 @@ async def set_admin_handler(message: Message):
     new_admin_id = int(parts[1])
 
     from database import is_user_exists
+
     if not await is_user_exists(new_admin_id):
         await message.answer(
             f"⚠️ Користувач `{new_admin_id}` не знайдений у базі. Переконайтесь, що він запустив бота."
@@ -454,6 +499,7 @@ async def pending_users_handler(message: Message):
         return
 
     from database import get_pending_users
+
     pending_users = await get_pending_users()  # Отримуємо список користувачів
 
     if not pending_users:
@@ -463,15 +509,23 @@ async def pending_users_handler(message: Message):
     for user_id, username in pending_users:
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="✅ Схвалити", callback_data=f"approve:{user_id}")],
-                [InlineKeyboardButton(text="❌ Відхилити", callback_data=f"reject:{user_id}")]
+                [
+                    InlineKeyboardButton(
+                        text="✅ Схвалити", callback_data=f"approve:{user_id}"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="❌ Відхилити", callback_data=f"reject:{user_id}"
+                    )
+                ],
             ]
         )
 
         await message.answer(
-            f"👤 **Користувач**: @{username}\n🆔 `{user_id}`",
-            reply_markup=keyboard
+            f"👤 **Користувач**: @{username}\n🆔 `{user_id}`", reply_markup=keyboard
         )
+
 
 @dp.callback_query(lambda c: c.data.startswith("approve:"))
 async def approve_user_callback(callback: types.CallbackQuery):
@@ -479,7 +533,9 @@ async def approve_user_callback(callback: types.CallbackQuery):
     user_id = int(callback.data.split(":")[1])
     await approve_user(user_id)  # Функція, яка оновлює базу даних
 
-    await bot.send_message(user_id, "✅ Вас схвалив адміністратор! Ви тепер можете користуватися ботом.")
+    await bot.send_message(
+        user_id, "✅ Вас схвалив адміністратор! Ви тепер можете користуватися ботом."
+    )
     await callback.message.edit_text(f"✅ Користувач `{user_id}` схвалений!")
     await callback.answer("✅ Користувач схвалений")
 
@@ -490,11 +546,11 @@ async def reject_user_callback(callback: types.CallbackQuery):
     user_id = int(callback.data.split(":")[1])
 
     from database import remove_user
+
     await remove_user(user_id)  # Видаляємо користувача з бази
 
     await callback.message.edit_text(f"❌ Користувач `{user_id}` відхилений.")
     await callback.answer("❌ Користувач відхилений")
-
 
 
 @dp.message(Command("approve"))
@@ -598,26 +654,32 @@ async def add_wallet_button(message: Message):
         parse_mode="Markdown",
     )
 
+
 @dp.message(Command("unsubscribe"))
 async def unsubscribe_handler(message: Message):
     """Команда для відписки від сповіщень"""
     user_id = message.from_user.id
     await remove_subscriber(user_id)
-    await message.answer("❌ Ви відписалися від сповіщень. Якщо захочете повернутися – скористайтеся командою /subscribe.")
+    await message.answer(
+        "❌ Ви відписалися від сповіщень. Якщо захочете повернутися – скористайтеся командою /subscribe."
+    )
 
     # Оновлення меню після відписки
     menu = await get_main_menu(user_id)
     await message.answer("Оновлено меню:", reply_markup=menu)
+
 
 @dp.message(F.text == "🔔 Підписатися на сповіщення")
 async def subscribe_button_handler(message: Message):
     """Обробляє натискання кнопки '🔔 Підписатися на сповіщення'"""
     await subscribe_handler(message)
 
+
 @dp.message(F.text == "🔕 Відписатися")
 async def unsubscribe_button_handler(message: Message):
     """Обробляє натискання кнопки '🔕 Відписатися'"""
     await unsubscribe_handler(message)
+
 
 @dp.callback_query(lambda c: c.data.startswith("delete_wallet:"))
 async def delete_wallet_callback(callback_query: types.CallbackQuery):
@@ -630,9 +692,12 @@ async def delete_wallet_callback(callback_query: types.CallbackQuery):
     if success:
         await callback_query.message.edit_text(f"✅ Гаманець `{address}` видалено!")
     else:
-        await callback_query.message.answer("⚠️ Помилка видалення гаманця. Можливо, він вже був видалений.")
+        await callback_query.message.answer(
+            "⚠️ Помилка видалення гаманця. Можливо, він вже був видалений."
+        )
 
     await callback_query.answer()  # Закриваємо сповіщення
+
 
 async def main():
     await update_db_schema()  # Додаємо колонку is_subscribed

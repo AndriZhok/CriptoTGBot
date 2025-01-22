@@ -168,10 +168,13 @@ async def is_user_exists(user_id: int) -> bool:
         result = await cursor.fetchone()
         return result[0] > 0  # Якщо хоча б один запис знайдено, повертаємо True
 
+
 async def is_user_approved(user_id):
     """Перевіряє, чи схвалений користувач адміністратором"""
     async with aiosqlite.connect(DB_NAME) as db:
-        cursor = await db.execute("SELECT is_approved FROM users WHERE user_id = ?", (user_id,))
+        cursor = await db.execute(
+            "SELECT is_approved FROM users WHERE user_id = ?", (user_id,)
+        )
         row = await cursor.fetchone()
         return row and row[0] == 1  # Повертає True, якщо is_approved = 1
 
@@ -179,7 +182,9 @@ async def is_user_approved(user_id):
 async def approve_user(user_id: int):
     """Адмін схвалює користувача"""
     async with aiosqlite.connect("wallets.db") as db:
-        await db.execute("UPDATE users SET is_approved = 1 WHERE user_id = ?", (user_id,))
+        await db.execute(
+            "UPDATE users SET is_approved = 1 WHERE user_id = ?", (user_id,)
+        )
         await db.commit()
 
 
@@ -192,11 +197,15 @@ async def add_user(user_id: int, username: str):
         )
         await db.commit()
 
+
 async def get_pending_users():
     """Отримує всіх користувачів, які ще не схвалені"""
     async with aiosqlite.connect(DB_NAME) as db:
-        cursor = await db.execute("SELECT user_id, username FROM users WHERE is_approved = 0")
+        cursor = await db.execute(
+            "SELECT user_id, username FROM users WHERE is_approved = 0"
+        )
         return await cursor.fetchall()
+
 
 async def remove_user(user_id):
     """Видаляє користувача з бази даних"""
@@ -204,15 +213,21 @@ async def remove_user(user_id):
         await db.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
         await db.commit()
 
+
 async def remove_subscriber(user_id: int):
     """Змінює статус підписки користувача на 0 (відписка)"""
     async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute("UPDATE users SET is_subscribed = 0 WHERE user_id = ?", (user_id,))
+        await db.execute(
+            "UPDATE users SET is_subscribed = 0 WHERE user_id = ?", (user_id,)
+        )
         await db.commit()
+
 
 async def is_user_subscribed(user_id: int) -> bool:
     """Перевіряє, чи підписаний користувач"""
     async with aiosqlite.connect(DB_NAME) as db:
-        cursor = await db.execute("SELECT is_subscribed FROM users WHERE user_id = ?", (user_id,))
+        cursor = await db.execute(
+            "SELECT is_subscribed FROM users WHERE user_id = ?", (user_id,)
+        )
         row = await cursor.fetchone()
         return row and row[0] == 1  # True, якщо користувач підписаний
