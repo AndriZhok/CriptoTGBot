@@ -203,3 +203,16 @@ async def remove_user(user_id):
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
         await db.commit()
+
+async def remove_subscriber(user_id: int):
+    """Змінює статус підписки користувача на 0 (відписка)"""
+    async with aiosqlite.connect(DB_NAME) as db:
+        await db.execute("UPDATE users SET is_subscribed = 0 WHERE user_id = ?", (user_id,))
+        await db.commit()
+
+async def is_user_subscribed(user_id: int) -> bool:
+    """Перевіряє, чи підписаний користувач"""
+    async with aiosqlite.connect(DB_NAME) as db:
+        cursor = await db.execute("SELECT is_subscribed FROM users WHERE user_id = ?", (user_id,))
+        row = await cursor.fetchone()
+        return row and row[0] == 1  # True, якщо користувач підписаний

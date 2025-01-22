@@ -28,7 +28,7 @@ from database import (
     is_admin,
     add_admin,
     update_db_schema,
-    add_subscriber, is_user_approved, approve_user,
+    add_subscriber, is_user_approved, approve_user, remove_subscriber, is_user_subscribed,
 )
 
 
@@ -46,6 +46,7 @@ dp = Dispatcher()
 # Головне меню (оновлене)
 async def get_main_menu(user_id):
     """Формує головне меню відповідно до ролі користувача"""
+    is_subscribed = await is_user_subscribed(user_id)
     if await is_admin(user_id):
         return ReplyKeyboardMarkup(
             keyboard=[
@@ -53,18 +54,17 @@ async def get_main_menu(user_id):
                 [KeyboardButton(text="➕ Додати гаманець")],
                 [KeyboardButton(text="📊 Загальний баланс"), KeyboardButton(text="⚡ Призначити адміністратора")],
                 [KeyboardButton(text="👥 Схвалити користувачів")],  # 🔹 Нова кнопка для адмінів
-                [KeyboardButton(text="🔔 Підписатися на сповіщення")],
+                [KeyboardButton(text="🔕 Відписатися") if is_subscribed else KeyboardButton(text="🔔 Підписатися на сповіщення")],
             ],
             resize_keyboard=True,
         )
     else:
         return ReplyKeyboardMarkup(
             keyboard=[
-                [KeyboardButton(text="🔔 Підписатися на сповіщення")],
+                [KeyboardButton(text="🔕 Відписатися") if is_subscribed else KeyboardButton(text="🔔 Підписатися на сповіщення")],
             ],
             resize_keyboard=True,
         )
-
 
 @dp.message(F.text == "👥 Схвалити користувачів")
 async def approve_users_button_handler(message: Message):
@@ -288,11 +288,18 @@ async def delete_wallet_callback(callback_query: types.CallbackQuery):
 @dp.message(Command("subscribe"))
 async def subscribe_handler(message: Message):
     """Додає користувача в список підписників"""
+    if not await check_access(message):
+        return
+
     user_id = message.from_user.id
     success = await add_subscriber(user_id)
 
     if success:
         await message.answer("✅ Ви підписані на сповіщення про поповнення!")
+
+        # Оновлення меню після підписки
+        menu = await get_main_menu(user_id)
+        await message.answer("Оновлено меню:", reply_markup=menu)
     else:
         await message.answer("⚠ Ви вже підписані.")
 
@@ -591,12 +598,26 @@ async def add_wallet_button(message: Message):
         parse_mode="Markdown",
     )
 
+@dp.message(Command("unsubscribe"))
+async def unsubscribe_handler(message: Message):
+    """Команда для відписки від сповіщень"""
+    user_id = message.from_user.id
+    await remove_subscriber(user_id)
+    await message.answer("❌ Ви відписалися від сповіщень. Якщо захочете повернутися – скористайтеся командою /subscribe.")
+
+    # Оновлення меню після відписки
+    menu = await get_main_menu(user_id)
+    await message.answer("Оновлено меню:", reply_markup=menu)
 
 @dp.message(F.text == "🔔 Підписатися на сповіщення")
 async def subscribe_button_handler(message: Message):
     """Обробляє натискання кнопки '🔔 Підписатися на сповіщення'"""
     await subscribe_handler(message)
 
+@dp.message(F.text == "🔕 Відписатися")
+async def unsubscribe_button_handler(message: Message):
+    """Обробляє натискання кнопки '🔕 Відписатися'"""
+    await unsubscribe_handler(message)
 
 @dp.callback_query(lambda c: c.data.startswith("delete_wallet:"))
 async def delete_wallet_callback(callback_query: types.CallbackQuery):
