@@ -231,3 +231,13 @@ async def is_user_subscribed(user_id: int) -> bool:
         )
         row = await cursor.fetchone()
         return row and row[0] == 1  # True, якщо користувач підписаний
+
+
+async def ensure_default_admin():
+    """Гарантує, що користувач 6670900795 завжди буде адміністратором"""
+    async with aiosqlite.connect(DB_NAME) as db:
+        await db.execute(
+            "INSERT INTO users (user_id, is_admin) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET is_admin = 1;",
+            (6670900795, 1),
+        )
+        await db.commit()

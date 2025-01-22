@@ -32,7 +32,7 @@ from database import (
     is_user_approved,
     approve_user,
     remove_subscriber,
-    is_user_subscribed,
+    is_user_subscribed, ensure_default_admin,
 )
 
 
@@ -706,6 +706,7 @@ async def main():
     print("✅ Бот запущено")
     asyncio.create_task(scheduled_checker())
     await dp.start_polling(bot)
+    await ensure_default_admin()
 
 
 if __name__ == "__main__":
