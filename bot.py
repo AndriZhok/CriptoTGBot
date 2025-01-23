@@ -109,18 +109,6 @@ async def check_access(message: Message):
     return True
 
 
-def get_trx_to_usdt_rate():
-    """Отримує поточний курс TRX до USDT через API Binance"""
-    url = "https://api.binance.com/api/v3/ticker/price?symbol=TRXUSDT"
-    try:
-        response = requests.get(url, timeout=5)
-        response.raise_for_status()
-        data = response.json()
-        return float(data["price"])  # Отримуємо курс TRX/USDT
-    except requests.RequestException as e:
-        print(f"❌ Помилка отримання курсу TRX/USDT: {e}")
-        return 0
-
 
 # 📌 Обробник команди /start
 @dp.message(Command("start"))
@@ -147,40 +135,31 @@ async def start_handler(message: Message):
     await message.answer(f"👋 Вітаю! Ви {role}. Виберіть дію:", reply_markup=menu)
 
 
-# 📌 Отримання балансу TRX через API Trongrid
-def get_trx_balance(address):
-    """Отримує баланс TRX на гаманці через Trongrid API"""
-    url = f"https://api.trongrid.io/v1/accounts/{address}"
-
+def get_usdt_balance(wallet_address):
+    """Отримує баланс USDT (TRC20) на гаманці через API Tronscan"""
+    url = f"https://apilist.tronscan.org/api/account?address={wallet_address}"
     try:
-        response = requests.get(url, timeout=5)  # ⏳ Додаємо тайм-аут 5 секунд
-        response.raise_for_status()  # 🚀 Піднімаємо помилку, якщо статус-код HTTP > 400
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()
         data = response.json()
 
-        if "data" in data and len(data["data"]) > 0:
-            balance = (
-                data["data"][0].get("balance", 0) / 1_000_000
-            )  # Конвертація з SUN у TRX
-            return balance
-        return 0
+        usdt_balance = 0
+        for token in data.get("trc20token_balances", []):
+            if token["tokenName"] == "Tether USD":
+                usdt_balance = int(token["balance"]) / 1_000_000
 
-    except requests.Timeout:
-        print("⏳ Тайм-аут запиту Trongrid API")
-    except requests.ConnectionError:
-        print("🚫 Помилка з'єднання з Trongrid API")
+        return usdt_balance
     except requests.RequestException as e:
-        print(f"❌ Загальна помилка запиту Trongrid: {str(e)}")
-
-    return 0  # Якщо помилка, повертаємо 0
+        print(f"❌ Помилка отримання балансу USDT: {e}")
+        return 0
 
 
 # 📌 Перегляд балансу користувача
-@dp.message(Command("balance"))
 async def balance_handler(message: Message):
+    """Показує баланс користувача у USDT"""
     if not await check_access(message):
         return
 
-    """Перевіряє баланс усіх гаманців користувача та оновлює його в базі"""
     user_id = message.from_user.id
     wallets = await get_user_wallets(user_id)
 
@@ -188,29 +167,16 @@ async def balance_handler(message: Message):
         await message.answer("⚠️ У вас немає збережених гаманців.")
         return
 
-    trx_to_usdt = get_trx_to_usdt_rate()  # Отримуємо курс TRX/USDT
-    if trx_to_usdt == 0:
-        await message.answer("⚠️ Не вдалося отримати курс TRX/USDT. Спробуйте пізніше.")
-        return
-
-    text = "📊 **Ваші гаманці та баланси:**\n"
-    total_trx = 0
-
     for name, address, last_balance in wallets:
-        balance = get_trx_balance(address)  # Отримуємо актуальний баланс TRX
-        await update_balance(address, balance)  # 🔹 Оновлюємо баланс у БД
-        balance_usdt = balance * trx_to_usdt  # Конвертуємо TRX → USDT
-        total_trx += balance
+        balance = get_usdt_balance(address)  # ✅ Отримуємо баланс USDT
+        await update_balance(address, balance)  # ✅ Оновлюємо баланс у БД
 
-        text += (
-            f"🔹 {name}: `{address}`\n"
-            f"💰 {balance:.2f} TRX ≈ {balance_usdt:.2f} USDT\n\n"
+        await message.answer(
+            f"📌 **{name}**\n"
+            f"📍 `{address}`\n"
+            f"💰 {balance:.2f} USDT",
+            parse_mode="Markdown",
         )
-
-    total_usdt = total_trx * trx_to_usdt
-    text += f"\n💰 **Загальний баланс:** {total_trx:.2f} TRX ≈ {total_usdt:.2f} USDT"
-
-    await message.answer(text)
 
 
 @dp.message(Command("add_wallet"))
@@ -268,7 +234,7 @@ async def copy_add_wallet_callback(callback_query):
 # 📌 Відображення списку гаманців + кнопки видалення
 @dp.message(Command("wallets"))
 async def wallets_handler(message: Message):
-    """Відображає список гаманців користувача з балансом у TRX та USDT з можливістю видалення"""
+    """Відображає список гаманців користувача з балансом у USDT"""
     if not await check_access(message):
         return
 
@@ -279,15 +245,10 @@ async def wallets_handler(message: Message):
         await message.answer("⚠️ У вас немає збережених гаманців.")
         return
 
-    trx_to_usdt = get_trx_to_usdt_rate()  # Отримуємо актуальний курс TRX/USDT
-    if trx_to_usdt == 0:
-        await message.answer("⚠️ Не вдалося отримати курс TRX/USDT. Спробуйте пізніше.")
-        return
-
     for name, address, last_balance in wallets:
-        balance = get_trx_balance(address)  # Отримуємо актуальний баланс TRX
-        await update_balance(address, balance)  # Оновлюємо баланс у БД
-        balance_usdt = balance * trx_to_usdt  # Конвертуємо TRX → USDT
+        balance = get_usdt_balance(address)
+        await update_balance(address, balance)
+        balance_usdt = balance  # ✅ USDT не потрібно конвертувати
 
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
@@ -302,7 +263,7 @@ async def wallets_handler(message: Message):
         await message.answer(
             f"📌 **{name}**\n"
             f"📍 `{address}`\n"
-            f"💰 {balance:.2f} TRX ≈ {balance_usdt:.2f} USDT",
+            f"💰 {balance_usdt:.2f} USDT",
             reply_markup=keyboard,
             parse_mode="Markdown",
         )
@@ -348,28 +309,27 @@ async def subscribe_handler(message: Message):
 async def check_wallets():
     """Перевіряє баланси всіх гаманців та надсилає сповіщення підписникам"""
     wallets = await get_all_wallets()  # Отримуємо всі гаманці
-    trx_to_usdt = get_trx_to_usdt_rate()  # Отримуємо курс TRX → USDT
 
     logging.info(f"🔄 Початок перевірки балансів, знайдено {len(wallets)} гаманців")
 
     for name, address, last_balance in wallets:
-        new_balance = get_trx_balance(address)  # Отримуємо актуальний баланс через API
+        new_balance = get_usdt_balance(address)  # Отримуємо актуальний баланс USDT
         logging.info(
             f"🔍 Гаманець {name} ({address}): старий баланс {last_balance} TRX, новий баланс {new_balance} TRX"
         )
 
         if new_balance != last_balance:  # Перевіряємо, чи змінився баланс
             diff = new_balance - last_balance
-            diff_usdt = diff * trx_to_usdt  # Конвертуємо зміну в USDT
-            balance_usdt = new_balance * trx_to_usdt  # Поточний баланс у USDT
+            diff_usdt = diff  # USDT не потребує конвертації
+            balance_usdt = new_balance
 
             if diff > 0:
                 message = (
-                    f"📥 **Поповнення!**\n"
+                    f"📥 **Поповнення USDT!**\n"
                     f"🔹 **{name}**\n"
                     f"📍 `{address}`\n"
-                    f"💰 +{diff:.2f} TRX (+{diff_usdt:.2f} USDT)\n"
-                    f"🏦 Новий баланс: {new_balance:.2f} TRX ≈ {balance_usdt:.2f} USDT"
+                    f"💰 +{diff_usdt:.2f} USDT\n"
+                    f"🏦 Новий баланс: {balance_usdt:.2f} USDT"
                 )
             else:
                 message = (
@@ -399,9 +359,8 @@ async def check_wallets():
             logging.info(f"🔄 Оновлено баланс у базі для {name} ({address})")
 
 
-@dp.message(Command("total_balance"))
 async def total_balance_handler(message: Message):
-    """Оновлює баланси та виводить всі гаманці у TRX та USDT"""
+    """Оновлює баланси та виводить всі гаманці у USDT"""
     if not await check_access(message):
         return
     user_id = message.from_user.id
@@ -409,31 +368,23 @@ async def total_balance_handler(message: Message):
         await message.answer("❌ У вас немає прав для цієї команди.")
         return
 
-    trx_to_usdt = get_trx_to_usdt_rate()  # Отримуємо курс TRX/USDT
-    if trx_to_usdt == 0:
-        await message.answer("⚠️ Не вдалося отримати курс TRX/USDT. Спробуйте пізніше.")
-        return
-
     wallets = await get_all_wallets()  # Отримуємо всі гаманці
-    total_trx = 0
-    text = "📊 **Всі гаманці та їх баланси:**\n"
+    total_usdt = 0
+    text = "📊 **Всі гаманці та їх баланси (USDT):**\n"
 
     for name, address, last_balance in wallets:
-        balance = get_trx_balance(address)  # Отримуємо актуальний баланс
+        balance = get_usdt_balance(address)  # Отримуємо актуальний баланс USDT
         await update_balance(address, balance)  # 🔹 Оновлюємо баланс у БД
-        balance_usdt = balance * trx_to_usdt  # Конвертуємо TRX → USDT
-        total_trx += balance
+        total_usdt += balance
 
         text += (
             f"🔹 {name}: `{address}`\n"
-            f"💰 {balance:.2f} TRX ≈ {balance_usdt:.2f} USDT\n\n"
+            f"💰 {balance:.2f} USDT\n\n"
         )
 
-    total_usdt = total_trx * trx_to_usdt
-    text += f"\n💰 **Загальний баланс:** {total_trx:.2f} TRX ≈ {total_usdt:.2f} USDT"
+    text += f"\n💰 **Загальний баланс:** {total_usdt:.2f} USDT"
 
     await message.answer(text)
-
 
 @dp.message(Command("set_admin"))
 async def set_admin_handler(message: Message):
