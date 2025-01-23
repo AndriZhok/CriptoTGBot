@@ -359,7 +359,7 @@ async def check_wallets():
 
 
 async def total_balance_handler(message: Message):
-    """Оновлює баланси та виводить всі гаманці у USDT"""
+    """Оновлює баланси та виводить всі гаманці у USDT, розбиваючи повідомлення, щоб уникнути помилки перевищення довжини"""
     if not await check_access(message):
         return
     user_id = message.from_user.id
@@ -369,21 +369,36 @@ async def total_balance_handler(message: Message):
 
     wallets = await get_all_wallets()  # Отримуємо всі гаманці
     total_usdt = 0
-    text = "📊 **Всі гаманці та їх баланси (USDT):**\n"
+    messages = []  # Список для збереження повідомлень перед відправкою
+
+    current_text = "📊 **Всі гаманці та їх баланси (USDT):**\n"
 
     for name, address, last_balance in wallets:
         balance = get_usdt_balance(address)  # Отримуємо актуальний баланс USDT
         await update_balance(address, balance)  # 🔹 Оновлюємо баланс у БД
         total_usdt += balance
 
-        text += (
+        new_line = (
             f"🔹 {name}: `{address}`\n"
             f"💰 {balance:.2f} USDT\n\n"
         )
 
-    text += f"\n💰 **Загальний баланс:** {total_usdt:.2f} USDT"
+        # Перевіряємо, чи наступне повідомлення не буде занадто довгим
+        if len(current_text) + len(new_line) > 4000:
+            messages.append(current_text)
+            current_text = ""
 
-    await message.answer(text)
+        current_text += new_line
+
+    if current_text:
+        messages.append(current_text)  # Додаємо останню частину
+
+    # Додаємо загальний баланс у кінці
+    messages.append(f"\n💰 **Загальний баланс:** {total_usdt:.2f} USDT")
+
+    # Відправляємо повідомлення частинами
+    for msg in messages:
+        await message.answer(msg)
 
 @dp.message(Command("set_admin"))
 async def set_admin_handler(message: Message):
