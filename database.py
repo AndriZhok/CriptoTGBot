@@ -1,7 +1,7 @@
 import aiosqlite
 
 DB_NAME = "wallets.db"
-
+DATABASE_PATH = "wallets.db"
 
 async def init_db():
     """Створює таблиці, якщо вони ще не існують"""
@@ -101,12 +101,18 @@ async def is_admin(user_id: int):
         return result and result[0] == 1  # Повертає True, якщо is_admin == 1
 
 
-async def add_admin(user_id: int):
-    """Додає користувача в базу як адміністратора"""
+async def add_admin(user_id: int, username: str = None):
+    """Додає користувача в базу як адміністратора та зберігає username"""
     async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute(
-            "INSERT OR REPLACE INTO users (user_id, is_admin) VALUES (?, 1)", (user_id,)
-        )
+        if username:
+            await db.execute(
+                "INSERT INTO users (user_id, username, is_admin) VALUES (?, ?, 1) ON CONFLICT(user_id) DO UPDATE SET is_admin = 1, username = COALESCE(username, ?)",
+                (user_id, username, username),
+            )
+        else:
+            await db.execute(
+                "UPDATE users SET is_admin = 1 WHERE user_id = ?", (user_id,)
+            )
         await db.commit()
 
 
