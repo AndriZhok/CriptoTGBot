@@ -315,7 +315,7 @@ async def check_wallets():
     for name, address, last_balance in wallets:
         new_balance = get_usdt_balance(address)  # Отримуємо актуальний баланс USDT
         logging.info(
-            f"🔍 Гаманець {name} ({address}): старий баланс {last_balance} TRX, новий баланс {new_balance} TRX"
+            f"🔍 Гаманець {name} ({address}): старий баланс {last_balance} USDT, новий баланс {new_balance} USDT"
         )
 
         if new_balance != last_balance:  # Перевіряємо, чи змінився баланс

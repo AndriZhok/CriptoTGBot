@@ -55,13 +55,12 @@ async def get_user_wallets(user_id: int):
 
 
 async def update_balance(address, new_balance):
-    """Оновлює баланс у базі даних"""
-    async with aiosqlite.connect(DB_NAME) as db:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute(
-            "UPDATE wallets SET last_balance = ? WHERE address = ?",
-            (new_balance, address),
+            "UPDATE wallets SET last_balance = ? WHERE address = ?", (new_balance, address)
         )
         await db.commit()
+        print(f"✅ Баланс {new_balance} USDT оновлено в БД для {address}")
 
 
 async def get_all_wallets():
