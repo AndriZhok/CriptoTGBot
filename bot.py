@@ -319,11 +319,10 @@ async def check_wallets():
         )
 
         if new_balance != last_balance:  # Перевіряємо, чи змінився баланс
-            diff = new_balance - last_balance
-            diff_usdt = diff  # USDT не потребує конвертації
+            diff_usdt = new_balance - last_balance
             balance_usdt = new_balance
 
-            if diff > 0:
+            if diff_usdt > 0:
                 message = (
                     f"📥 **Поповнення USDT!**\n"
                     f"🔹 **{name}**\n"
@@ -336,8 +335,8 @@ async def check_wallets():
                     f"📤 **Зняття коштів!**\n"
                     f"🔹 **{name}**\n"
                     f"📍 `{address}`\n"
-                    f"💸 {diff:.2f} TRX ({diff_usdt:.2f} USDT)\n"
-                    f"🏦 Новий баланс: {new_balance:.2f} TRX ≈ {balance_usdt:.2f} USDT"
+                    f"💸 {abs(diff_usdt):.2f} USDT\n"
+                    f"🏦 Новий баланс: {balance_usdt:.2f} USDT"
                 )
 
             # Отримуємо список підписаних користувачів
@@ -346,7 +345,7 @@ async def check_wallets():
 
             for user_id in subscribers:
                 try:
-                    if diff > 0 or await is_admin(user_id):  # 🔹 Відправляємо зняття тільки адмінам
+                    if diff_usdt > 0 or await is_admin(user_id):  # 🔹 Відправляємо зняття тільки адмінам
                         await bot.send_message(user_id, message)
                         logging.info(f"✅ Повідомлення надіслано користувачу {user_id}")
                 except Exception as e:
