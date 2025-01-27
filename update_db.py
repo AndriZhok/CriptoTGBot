@@ -7,7 +7,6 @@ async def update_db_schema():
         cursor = await db.execute("PRAGMA table_info(users)")
         columns = [column[1] for column in await cursor.fetchall()]
 
-        # Додаємо колонку `is_approved`, якщо її немає
         if "is_approved" not in columns:
             await db.execute(
                 "ALTER TABLE users ADD COLUMN is_approved INTEGER DEFAULT 0"

@@ -3,17 +3,21 @@ import aiosqlite
 DB_NAME = "wallets.db"
 DATABASE_PATH = "wallets.db"
 
+
 async def init_db():
     """Ініціалізує базу даних і створює необхідні таблиці"""
     async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute("""
+        await db.execute(
+            """
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY, 
                 name TEXT,
                 is_approved INTEGER DEFAULT 0
             )
-        """)
-        await db.execute("""
+        """
+        )
+        await db.execute(
+            """
             CREATE TABLE IF NOT EXISTS wallets (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER,
@@ -22,13 +26,16 @@ async def init_db():
                 balance REAL DEFAULT 0,
                 FOREIGN KEY (user_id) REFERENCES users(id)
             )
-        """)
-        await db.execute("""
+        """
+        )
+        await db.execute(
+            """
             CREATE TABLE IF NOT EXISTS subscribers (
                 user_id INTEGER PRIMARY KEY,
                 FOREIGN KEY (user_id) REFERENCES users(id)
             )
-        """)
+        """
+        )
         await db.commit()
         print("✅ База даних ініціалізована!")
 
@@ -44,7 +51,7 @@ async def add_wallet(user_id: int, name: str, address: str):
             await db.commit()
             return True
         except aiosqlite.IntegrityError:
-            return False  # Якщо гаманець вже існує
+            return False
 
 
 async def get_user_wallets(user_id: int):
@@ -60,7 +67,8 @@ async def get_user_wallets(user_id: int):
 async def update_balance(address, new_balance):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute(
-            "UPDATE wallets SET last_balance = ? WHERE address = ?", (new_balance, address)
+            "UPDATE wallets SET last_balance = ? WHERE address = ?",
+            (new_balance, address),
         )
         await db.commit()
         print(f"✅ Баланс {new_balance} USDT оновлено в БД для {address}")
@@ -90,7 +98,7 @@ async def delete_wallet(user_id, address):
         )
         await db.commit()
         rows_deleted = cursor.rowcount
-        return rows_deleted > 0  # True, якщо щось видалено, False, якщо ні
+        return rows_deleted > 0
 
 
 async def is_admin(user_id: int):
@@ -100,7 +108,7 @@ async def is_admin(user_id: int):
             "SELECT is_admin FROM users WHERE user_id = ?", (user_id,)
         )
         result = await cursor.fetchone()
-        return result and result[0] == 1  # Повертає True, якщо is_admin == 1
+        return result and result[0] == 1
 
 
 async def add_admin(user_id: int, username: str = None):
@@ -136,11 +144,10 @@ async def get_subscribers():
 async def update_db_schema():
     """Оновлює схему бази даних, додаючи відсутні колонки"""
     async with aiosqlite.connect("wallets.db") as db:
-        # Отримуємо список колонок таблиці
+
         cursor = await db.execute("PRAGMA table_info(users)")
         columns = [row[1] for row in await cursor.fetchall()]
 
-        # Додаємо колонку лише якщо її ще немає
         if "is_subscribed" not in columns:
             await db.execute(
                 "ALTER TABLE users ADD COLUMN is_subscribed INTEGER DEFAULT 0"
@@ -174,7 +181,7 @@ async def is_user_exists(user_id: int) -> bool:
             "SELECT COUNT(*) FROM users WHERE user_id = ?", (user_id,)
         )
         result = await cursor.fetchone()
-        return result[0] > 0  # Якщо хоча б один запис знайдено, повертаємо True
+        return result[0] > 0
 
 
 async def is_user_approved(user_id):
@@ -184,7 +191,7 @@ async def is_user_approved(user_id):
             "SELECT is_approved FROM users WHERE user_id = ?", (user_id,)
         )
         row = await cursor.fetchone()
-        return row and row[0] == 1  # Повертає True, якщо is_approved = 1
+        return row and row[0] == 1
 
 
 async def approve_user(user_id: int):
@@ -238,7 +245,7 @@ async def is_user_subscribed(user_id: int) -> bool:
             "SELECT is_subscribed FROM users WHERE user_id = ?", (user_id,)
         )
         row = await cursor.fetchone()
-        return row and row[0] == 1  # True, якщо користувач підписаний
+        return row and row[0] == 1
 
 
 async def ensure_default_admin():

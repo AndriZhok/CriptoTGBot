@@ -32,36 +32,45 @@ from database import (
     is_user_approved,
     approve_user,
     remove_subscriber,
-    is_user_subscribed, ensure_default_admin,
+    is_user_subscribed,
+    ensure_default_admin,
 )
 
-
-# Завантажуємо змінні середовища
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
 
-# Логування
 logging.basicConfig(level=logging.INFO)
 
-# Ініціалізація бота та диспетчера
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
 
-# Головне меню (оновлене)
 async def get_main_menu(user_id):
     """Формує головне меню відповідно до ролі користувача"""
     is_subscribed = await is_user_subscribed(user_id)
     if await is_admin(user_id):
         return ReplyKeyboardMarkup(
             keyboard=[
-                [KeyboardButton(text="📋 Мої гаманці"), KeyboardButton(text="💰 Баланс")],
+                [
+                    KeyboardButton(text="📋 Мої гаманці"),
+                    KeyboardButton(text="💰 Баланс"),
+                ],
                 [KeyboardButton(text="➕ Додати гаманець")],
-                [KeyboardButton(text="📊 Загальний баланс"), KeyboardButton(text="⚡ Призначити адміністратора")],
-                [KeyboardButton(text="👥 Схвалити користувачів"), KeyboardButton(text="🔄 Оновити базу")],  # ✅ Виправлено
+                [
+                    KeyboardButton(text="📊 Загальний баланс"),
+                    KeyboardButton(text="⚡ Призначити адміністратора"),
+                ],
+                [
+                    KeyboardButton(text="👥 Схвалити користувачів"),
+                    KeyboardButton(text="🔄 Оновити базу"),
+                ],
                 [
                     KeyboardButton(
-                        text="🔕 Відписатися" if is_subscribed else "🔔 Підписатися на сповіщення"
+                        text=(
+                            "🔕 Відписатися"
+                            if is_subscribed
+                            else "🔔 Підписатися на сповіщення"
+                        )
                     )
                 ],
             ],
@@ -72,7 +81,11 @@ async def get_main_menu(user_id):
             keyboard=[
                 [
                     KeyboardButton(
-                        text="🔕 Відписатися" if is_subscribed else "🔔 Підписатися на сповіщення"
+                        text=(
+                            "🔕 Відписатися"
+                            if is_subscribed
+                            else "🔔 Підписатися на сповіщення"
+                        )
                     )
                 ]
             ],
@@ -97,19 +110,15 @@ async def check_access(message: Message):
     return True
 
 
-
-# 📌 Обробник команди /start
 @dp.message(Command("start"))
 async def start_handler(message: Message):
     """Обробляє команду /start з перевіркою доступу користувача"""
     user_id = message.from_user.id
-    username = (
-        message.from_user.username or f"user_{user_id}"
-    )  # Якщо username відсутній
+    username = message.from_user.username or f"user_{user_id}"
 
     from database import add_user
 
-    await add_user(user_id, username)  # Додаємо користувача в базу з username
+    await add_user(user_id, username)
 
     if not await is_user_approved(user_id):
         await message.answer(
@@ -118,7 +127,7 @@ async def start_handler(message: Message):
         return
 
     role = "адміністратор" if await is_admin(user_id) else "звичайний користувач"
-    menu = await get_main_menu(user_id)  # Визначаємо меню відповідно до ролі
+    menu = await get_main_menu(user_id)
 
     await message.answer(f"👋 Вітаю! Ви {role}. Виберіть дію:", reply_markup=menu)
 
@@ -142,7 +151,6 @@ def get_usdt_balance(wallet_address):
         return 0
 
 
-# 📌 Перегляд балансу користувача
 async def balance_handler(message: Message):
     """Показує баланс користувача у USDT"""
     if not await check_access(message):
@@ -156,13 +164,11 @@ async def balance_handler(message: Message):
         return
 
     for name, address, last_balance in wallets:
-        balance = get_usdt_balance(address)  # ✅ Отримуємо баланс USDT
-        await update_balance(address, balance)  # ✅ Оновлюємо баланс у БД
+        balance = get_usdt_balance(address)
+        await update_balance(address, balance)
 
         await message.answer(
-            f"📌 **{name}**\n"
-            f"📍 `{address}`\n"
-            f"💰 {balance:.2f} USDT",
+            f"📌 **{name}**\n" f"📍 `{address}`\n" f"💰 {balance:.2f} USDT",
             parse_mode="Markdown",
         )
 
@@ -172,14 +178,13 @@ async def add_wallet_handler(message: Message):
     """Обробляє команду /add_wallet: (Доступ тільки для адмінів)"""
     user_id = message.from_user.id
 
-    # 🔒 Доступ тільки для адміністраторів
     if not await is_admin(user_id):
         await message.answer("❌ Ви не маєте прав додавати гаманці.")
         return
 
     parts = message.text.split(maxsplit=2)
 
-    if len(parts) < 3:  # Якщо команда викликана без параметрів
+    if len(parts) < 3:
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
@@ -199,7 +204,6 @@ async def add_wallet_handler(message: Message):
         )
         return
 
-    # Якщо користувач ввів назву та адресу – додаємо гаманець
     name, address = parts[1], parts[2]
 
     success = await add_wallet(user_id, name, address)
@@ -219,7 +223,6 @@ async def copy_add_wallet_callback(callback_query):
     )
 
 
-# 📌 Відображення списку гаманців + кнопки видалення
 @dp.message(Command("wallets"))
 async def wallets_handler(message: Message):
     """Відображає список гаманців користувача з балансом з БД (без запиту до API)"""
@@ -245,9 +248,7 @@ async def wallets_handler(message: Message):
         )
 
         await message.answer(
-            f"📌 **{name}**\n"
-            f"📍 `{address}`\n"
-            f"💰 {last_balance:.2f} USDT",
+            f"📌 **{name}**\n" f"📍 `{address}`\n" f"💰 {last_balance:.2f} USDT",
             reply_markup=keyboard,
             parse_mode="Markdown",
         )
@@ -268,7 +269,7 @@ async def delete_wallet_callback(callback_query: types.CallbackQuery):
             "⚠️ Помилка видалення гаманця. Можливо, він вже був видалений."
         )
 
-    await callback_query.answer()  # Закриваємо сповіщення
+    await callback_query.answer()
 
 
 @dp.message(Command("subscribe"))
@@ -283,7 +284,6 @@ async def subscribe_handler(message: Message):
     if success:
         await message.answer("✅ Ви підписані на сповіщення про поповнення!")
 
-        # Оновлення меню після підписки
         menu = await get_main_menu(user_id)
         await message.answer("Оновлено меню:", reply_markup=menu)
     else:
@@ -292,17 +292,17 @@ async def subscribe_handler(message: Message):
 
 async def check_wallets():
     """Перевіряє баланси всіх гаманців та надсилає сповіщення підписникам"""
-    wallets = await get_all_wallets()  # Отримуємо всі гаманці
+    wallets = await get_all_wallets()
 
     logging.info(f"🔄 Початок перевірки балансів, знайдено {len(wallets)} гаманців")
 
     for name, address, last_balance in wallets:
-        new_balance = get_usdt_balance(address)  # Отримуємо актуальний баланс USDT
+        new_balance = get_usdt_balance(address)
         logging.info(
             f"🔍 Гаманець {name} ({address}): старий баланс {last_balance} USDT, новий баланс {new_balance} USDT"
         )
 
-        if new_balance != last_balance:  # Перевіряємо, чи змінився баланс
+        if new_balance != last_balance:
             diff_usdt = new_balance - last_balance
             balance_usdt = new_balance
 
@@ -323,13 +323,12 @@ async def check_wallets():
                     f"🏦 Новий баланс: {balance_usdt:.2f} USDT"
                 )
 
-            # Отримуємо список підписаних користувачів
             subscribers = await get_subscribers()
             logging.info(f"✉ Надсилаємо сповіщення {len(subscribers)} підписникам")
 
             for user_id in subscribers:
                 try:
-                    if diff_usdt > 0 or await is_admin(user_id):  # 🔹 Відправляємо зняття тільки адмінам
+                    if diff_usdt > 0 or await is_admin(user_id):
                         await bot.send_message(user_id, message)
                         logging.info(f"✅ Повідомлення надіслано користувачу {user_id}")
                 except Exception as e:
@@ -337,7 +336,6 @@ async def check_wallets():
                         f"⚠️ Помилка надсилання повідомлення користувачу {user_id}: {e}"
                     )
 
-            # Оновлюємо баланс у базі
             await update_balance(address, new_balance)
             logging.info(f"🔄 Оновлено баланс у базі для {name} ({address})")
 
@@ -351,9 +349,9 @@ async def total_balance_handler(message: Message):
         await message.answer("❌ У вас немає прав для цієї команди.")
         return
 
-    wallets = await get_all_wallets()  # Отримуємо всі гаманці з БД
+    wallets = await get_all_wallets()
     total_usdt = 0
-    text_parts = []  # Список частин повідомлення
+    text_parts = []
     current_text = "📊 **Всі гаманці та їх баланси (USDT):**\n"
 
     for name, address, last_balance in wallets:
@@ -361,27 +359,25 @@ async def total_balance_handler(message: Message):
 
         new_line = f"🔹 {name}: `{address}`\n💰 {last_balance:.2f} USDT\n\n"
 
-        # Перевіряємо, чи не перевищуємо ліміт у 4096 символів
         if len(current_text) + len(new_line) > 4000:
-            text_parts.append(current_text)  # Зберігаємо поточний блок
-            current_text = ""  # Очищаємо для наступного блоку
+            text_parts.append(current_text)
+            current_text = ""
 
-        current_text += new_line  # Додаємо новий рядок
+        current_text += new_line
 
-    # Додаємо загальний баланс у кінець останнього блоку
     current_text += f"\n💰 **Загальний баланс:** {total_usdt:.2f} USDT"
-    text_parts.append(current_text)  # Додаємо останній блок
+    text_parts.append(current_text)
 
-    # Відправляємо всі частини повідомлення
     for part in text_parts:
         await message.answer(part)
+
 
 @dp.message(Command("set_admin"))
 async def set_admin_handler(message: Message):
     """Призначає іншого адміністратора (Доступ тільки для адмінів)"""
     user_id = message.from_user.id
 
-    if not await is_admin(user_id):  # 🔒 Перевіряємо, чи користувач адмін
+    if not await is_admin(user_id):
         await message.answer("❌ У вас немає прав для цієї команди.")
         return
 
@@ -416,7 +412,7 @@ async def scheduled_checker():
     """Перевіряє баланси гаманців та надсилає сповіщення про поповнення кожні 5 хвилин"""
     while True:
         await check_wallets()
-        await asyncio.sleep(300)  # Чекаємо 5 секунд
+        await asyncio.sleep(300)
 
 
 dp.message(Command("subscribe"))
@@ -436,13 +432,13 @@ async def pending_users_handler(message: Message):
     """Адмін переглядає список користувачів, які очікують схвалення"""
     user_id = message.from_user.id
 
-    if not await is_admin(user_id):  # 🔒 Доступ лише для адміністраторів
+    if not await is_admin(user_id):
         await message.answer("❌ У вас немає прав для цієї команди.")
         return
 
     from database import get_pending_users
 
-    pending_users = await get_pending_users()  # Отримуємо список користувачів
+    pending_users = await get_pending_users()
 
     if not pending_users:
         await message.answer("✅ Немає користувачів, які очікують схвалення.")
@@ -473,7 +469,7 @@ async def pending_users_handler(message: Message):
 async def approve_user_callback(callback: types.CallbackQuery):
     """Адміністратор схвалює користувача"""
     user_id = int(callback.data.split(":")[1])
-    await approve_user(user_id)  # Функція, яка оновлює базу даних
+    await approve_user(user_id)
 
     await bot.send_message(
         user_id, "✅ Вас схвалив адміністратор! Ви тепер можете користуватися ботом."
@@ -489,7 +485,7 @@ async def reject_user_callback(callback: types.CallbackQuery):
 
     from database import remove_user
 
-    await remove_user(user_id)  # Видаляємо користувача з бази
+    await remove_user(user_id)
 
     await callback.message.edit_text(f"❌ Користувач `{user_id}` відхилений.")
     await callback.answer("❌ Користувач відхилений")
@@ -531,7 +527,7 @@ async def show_balance(message: Message):
         return
 
     user_id = message.from_user.id
-    wallets = await get_user_wallets(user_id)  # Отримуємо гаманці користувача з БД
+    wallets = await get_user_wallets(user_id)
 
     if not wallets:
         await message.answer("⚠️ У вас немає збережених гаманців.")
@@ -539,9 +535,7 @@ async def show_balance(message: Message):
 
     for name, address, last_balance in wallets:
         await message.answer(
-            f"📌 **{name}**\n"
-            f"📍 `{address}`\n"
-            f"💰 {last_balance:.2f} USDT",  # Баланс береться з БД, а не API
+            f"📌 **{name}**\n" f"📍 `{address}`\n" f"💰 {last_balance:.2f} USDT",
             parse_mode="Markdown",
         )
 
@@ -553,11 +547,10 @@ async def update_db_handler(message: Message):
         return
 
     await message.answer("⏳ Оновлення балансів, зачекайте...")
-    await check_wallets()  # Викликаємо функцію оновлення балансів
+    await check_wallets()
 
-    # Отримуємо оновлене меню для користувача
     user_id = message.from_user.id
-    updated_menu = await get_main_menu(user_id)  # Викликаємо функцію формування меню
+    updated_menu = await get_main_menu(user_id)
 
     await message.answer("✅ База даних оновлена!", reply_markup=updated_menu)
 
@@ -630,7 +623,6 @@ async def unsubscribe_handler(message: Message):
         "❌ Ви відписалися від сповіщень. Якщо захочете повернутися – скористайтеся командою /subscribe."
     )
 
-    # Оновлення меню після відписки
     menu = await get_main_menu(user_id)
     await message.answer("Оновлено меню:", reply_markup=menu)
 
@@ -662,11 +654,11 @@ async def delete_wallet_callback(callback_query: types.CallbackQuery):
             "⚠️ Помилка видалення гаманця. Можливо, він вже був видалений."
         )
 
-    await callback_query.answer()  # Закриваємо сповіщення
+    await callback_query.answer()
 
 
 async def main():
-    await update_db_schema()  # Додаємо колонку is_subscribed
+    await update_db_schema()
     print("✅ База даних оновлена!")
     print("✅ Бот запущено")
     await ensure_default_admin()
