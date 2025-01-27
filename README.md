@@ -44,10 +44,17 @@ pip install -r requirements.txt
 Створіть файл `.env` у кореневій директорії та додайте наступні параметри:
 
 ```ini
-BOT_TOKEN=your_telegram_bot_token
-ADMIN_ID=your_telegram_id
-DATABASE_URL=sqlite:///crypto_wallets.db
-TRONSCAN_API_KEY=your_tronscan_api_key
+# 🔐 Telegram Bot Token (отримайте в @BotFather)
+BOT_TOKEN=your_bot_token_here
+
+# 👑 ID Адміністратора (замініть на ваш Telegram ID)
+DEFAULT_ADMIN_ID=your_admin_id_here
+
+# 🗄️ Назва файлу бази даних
+DB_NAME=wallets.db
+
+# 🔗 API URL для отримання балансу з Tronscan (безпеки ради URL можна змінювати)
+TRONSCAN_API_URL=https://apilist.tronscan.org/api/account?address=
 ```
 
 ### 5️⃣ Запуск бота
