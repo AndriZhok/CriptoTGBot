@@ -38,6 +38,7 @@ from database import (
 
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
+TRONSCAN_API_URL = os.getenv("TRONSCAN_API_URL")
 
 logging.basicConfig(level=logging.INFO)
 
@@ -134,7 +135,7 @@ async def start_handler(message: Message):
 
 def get_usdt_balance(wallet_address):
     """Отримує баланс USDT (TRC20) на гаманці через API Tronscan"""
-    url = f"https://apilist.tronscan.org/api/account?address={wallet_address}"
+    url = f"{TRONSCAN_API_URL}{wallet_address}"
     try:
         response = requests.get(url, timeout=5)
         response.raise_for_status()

@@ -1,7 +1,12 @@
+import os
 import aiosqlite
+from dotenv import load_dotenv
 
-DB_NAME = "wallets.db"
-DATABASE_PATH = "wallets.db"
+load_dotenv()
+
+DEFAULT_ADMIN_ID = int(os.getenv("DEFAULT_ADMIN_ID"))
+
+DB_NAME = os.getenv("DB_NAME")
 
 
 async def init_db():
@@ -65,7 +70,7 @@ async def get_user_wallets(user_id: int):
 
 
 async def update_balance(address, new_balance):
-    async with aiosqlite.connect(DATABASE_PATH) as db:
+    async with aiosqlite.connect(DB_NAME) as db:
         await db.execute(
             "UPDATE wallets SET last_balance = ? WHERE address = ?",
             (new_balance, address),
@@ -92,7 +97,7 @@ async def update_db_schema():
 
 async def delete_wallet(user_id, address):
     """Видаляє гаманець користувача з бази даних"""
-    async with aiosqlite.connect("wallets.db") as db:
+    async with aiosqlite.connect(DB_NAME) as db:
         cursor = await db.execute(
             "DELETE FROM wallets WHERE user_id = ? AND address = ?", (user_id, address)
         )
@@ -135,7 +140,7 @@ async def add_user(user_id: int):
 
 async def get_subscribers():
     """Повертає список усіх користувачів, які підписалися на сповіщення"""
-    async with aiosqlite.connect("wallets.db") as db:
+    async with aiosqlite.connect(DB_NAME) as db:
         cursor = await db.execute("SELECT user_id FROM users WHERE is_subscribed = 1")
         subscribers = await cursor.fetchall()
         return [row[0] for row in subscribers]
@@ -143,7 +148,7 @@ async def get_subscribers():
 
 async def update_db_schema():
     """Оновлює схему бази даних, додаючи відсутні колонки"""
-    async with aiosqlite.connect("wallets.db") as db:
+    async with aiosqlite.connect(DB_NAME) as db:
 
         cursor = await db.execute("PRAGMA table_info(users)")
         columns = [row[1] for row in await cursor.fetchall()]
@@ -176,7 +181,7 @@ async def get_subscribers():
 
 async def is_user_exists(user_id: int) -> bool:
     """Перевіряє, чи існує користувач у базі"""
-    async with aiosqlite.connect(DATABASE_PATH) as db:
+    async with aiosqlite.connect(DB_NAME) as db:
         cursor = await db.execute(
             "SELECT COUNT(*) FROM users WHERE user_id = ?", (user_id,)
         )
@@ -196,7 +201,7 @@ async def is_user_approved(user_id):
 
 async def approve_user(user_id: int):
     """Адмін схвалює користувача"""
-    async with aiosqlite.connect("wallets.db") as db:
+    async with aiosqlite.connect(DB_NAME) as db:
         await db.execute(
             "UPDATE users SET is_approved = 1 WHERE user_id = ?", (user_id,)
         )
@@ -249,10 +254,11 @@ async def is_user_subscribed(user_id: int) -> bool:
 
 
 async def ensure_default_admin():
-    """Гарантує, що користувач 6670900795 завжди буде адміністратором"""
+    """Гарантує, що визначений користувач завжди буде адміністратором"""
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute(
-            "INSERT INTO users (user_id, is_admin) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET is_admin = 1;",
-            (6670900795, 1),
+            "INSERT INTO users (user_id, is_admin) VALUES (?, ?) "
+            "ON CONFLICT(user_id) DO UPDATE SET is_admin = 1;",
+            (DEFAULT_ADMIN_ID, 1),
         )
         await db.commit()
