@@ -55,23 +55,13 @@ async def get_main_menu(user_id):
     if await is_admin(user_id):
         return ReplyKeyboardMarkup(
             keyboard=[
-                [
-                    KeyboardButton(text="📋 Мої гаманці"),
-                    KeyboardButton(text="💰 Баланс"),
-                ],
+                [KeyboardButton(text="📋 Мої гаманці"), KeyboardButton(text="💰 Баланс")],
                 [KeyboardButton(text="➕ Додати гаманець")],
+                [KeyboardButton(text="📊 Загальний баланс"), KeyboardButton(text="⚡ Призначити адміністратора")],
+                [KeyboardButton(text="👥 Схвалити користувачів"), KeyboardButton(text="🔄 Оновити базу")],  # ✅ Виправлено
                 [
-                    KeyboardButton(text="📊 Загальний баланс"),
-                    KeyboardButton(text="⚡ Призначити адміністратора"),
-                ],
-                [
-                    KeyboardButton(text="👥 Схвалити користувачів")
-                ],  # 🔹 Нова кнопка для адмінів
-                [
-                    (
-                        KeyboardButton(text="🔕 Відписатися")
-                        if is_subscribed
-                        else KeyboardButton(text="🔔 Підписатися на сповіщення")
+                    KeyboardButton(
+                        text="🔕 Відписатися" if is_subscribed else "🔔 Підписатися на сповіщення"
                     )
                 ],
             ],
@@ -81,12 +71,10 @@ async def get_main_menu(user_id):
         return ReplyKeyboardMarkup(
             keyboard=[
                 [
-                    (
-                        KeyboardButton(text="🔕 Відписатися")
-                        if is_subscribed
-                        else KeyboardButton(text="🔔 Підписатися на сповіщення")
+                    KeyboardButton(
+                        text="🔕 Відписатися" if is_subscribed else "🔔 Підписатися на сповіщення"
                     )
-                ],
+                ]
             ],
             resize_keyboard=True,
         )
@@ -234,7 +222,7 @@ async def copy_add_wallet_callback(callback_query):
 # 📌 Відображення списку гаманців + кнопки видалення
 @dp.message(Command("wallets"))
 async def wallets_handler(message: Message):
-    """Відображає список гаманців користувача з балансом у USDT"""
+    """Відображає список гаманців користувача з балансом з БД (без запиту до API)"""
     if not await check_access(message):
         return
 
@@ -246,10 +234,6 @@ async def wallets_handler(message: Message):
         return
 
     for name, address, last_balance in wallets:
-        balance = get_usdt_balance(address)
-        await update_balance(address, balance)
-        balance_usdt = balance  # ✅ USDT не потрібно конвертувати
-
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
@@ -263,7 +247,7 @@ async def wallets_handler(message: Message):
         await message.answer(
             f"📌 **{name}**\n"
             f"📍 `{address}`\n"
-            f"💰 {balance_usdt:.2f} USDT",
+            f"💰 {last_balance:.2f} USDT",
             reply_markup=keyboard,
             parse_mode="Markdown",
         )
@@ -359,7 +343,7 @@ async def check_wallets():
 
 
 async def total_balance_handler(message: Message):
-    """Оновлює баланси та виводить всі гаманці у USDT, розбиваючи повідомлення, щоб уникнути помилки перевищення довжини"""
+    """Виводить загальний баланс всіх гаманців (без запиту до API)"""
     if not await check_access(message):
         return
     user_id = message.from_user.id
@@ -367,38 +351,30 @@ async def total_balance_handler(message: Message):
         await message.answer("❌ У вас немає прав для цієї команди.")
         return
 
-    wallets = await get_all_wallets()  # Отримуємо всі гаманці
+    wallets = await get_all_wallets()  # Отримуємо всі гаманці з БД
     total_usdt = 0
-    messages = []  # Список для збереження повідомлень перед відправкою
-
+    text_parts = []  # Список частин повідомлення
     current_text = "📊 **Всі гаманці та їх баланси (USDT):**\n"
 
     for name, address, last_balance in wallets:
-        balance = get_usdt_balance(address)  # Отримуємо актуальний баланс USDT
-        await update_balance(address, balance)  # 🔹 Оновлюємо баланс у БД
-        total_usdt += balance
+        total_usdt += last_balance
 
-        new_line = (
-            f"🔹 {name}: `{address}`\n"
-            f"💰 {balance:.2f} USDT\n\n"
-        )
+        new_line = f"🔹 {name}: `{address}`\n💰 {last_balance:.2f} USDT\n\n"
 
-        # Перевіряємо, чи наступне повідомлення не буде занадто довгим
+        # Перевіряємо, чи не перевищуємо ліміт у 4096 символів
         if len(current_text) + len(new_line) > 4000:
-            messages.append(current_text)
-            current_text = ""
+            text_parts.append(current_text)  # Зберігаємо поточний блок
+            current_text = ""  # Очищаємо для наступного блоку
 
-        current_text += new_line
+        current_text += new_line  # Додаємо новий рядок
 
-    if current_text:
-        messages.append(current_text)  # Додаємо останню частину
+    # Додаємо загальний баланс у кінець останнього блоку
+    current_text += f"\n💰 **Загальний баланс:** {total_usdt:.2f} USDT"
+    text_parts.append(current_text)  # Додаємо останній блок
 
-    # Додаємо загальний баланс у кінці
-    messages.append(f"\n💰 **Загальний баланс:** {total_usdt:.2f} USDT")
-
-    # Відправляємо повідомлення частинами
-    for msg in messages:
-        await message.answer(msg)
+    # Відправляємо всі частини повідомлення
+    for part in text_parts:
+        await message.answer(part)
 
 @dp.message(Command("set_admin"))
 async def set_admin_handler(message: Message):
@@ -440,7 +416,7 @@ async def scheduled_checker():
     """Перевіряє баланси гаманців та надсилає сповіщення про поповнення кожні 5 хвилин"""
     while True:
         await check_wallets()
-        await asyncio.sleep(5)  # Чекаємо 5 секунд
+        await asyncio.sleep(300)  # Чекаємо 5 секунд
 
 
 dp.message(Command("subscribe"))
@@ -550,25 +526,49 @@ async def show_wallets(message: Message):
 
 @dp.message(F.text == "💰 Баланс")
 async def show_balance(message: Message):
-    """Обробляє кнопку "Баланс" та викликає основний обробник"""
+    """Відображає баланс користувача з бази, не запитуючи API"""
     if not await check_access(message):
         return
-    if not await is_admin(message.from_user.id):
-        await message.answer("❌ У вас немає прав для цієї команди.")
+
+    user_id = message.from_user.id
+    wallets = await get_user_wallets(user_id)  # Отримуємо гаманці користувача з БД
+
+    if not wallets:
+        await message.answer("⚠️ У вас немає збережених гаманців.")
         return
-    await balance_handler(message)
+
+    for name, address, last_balance in wallets:
+        await message.answer(
+            f"📌 **{name}**\n"
+            f"📍 `{address}`\n"
+            f"💰 {last_balance:.2f} USDT",  # Баланс береться з БД, а не API
+            parse_mode="Markdown",
+        )
+
+
+@dp.message(Command("update_db"))
+async def update_db_handler(message: Message):
+    """Оновлює баланс усіх гаманців у базі (ручне оновлення)"""
+    if not await check_access(message):
+        return
+
+    await message.answer("⏳ Оновлення балансів, зачекайте...")
+    await check_wallets()  # Викликаємо функцію оновлення балансів
+
+    # Отримуємо оновлене меню для користувача
+    user_id = message.from_user.id
+    updated_menu = await get_main_menu(user_id)  # Викликаємо функцію формування меню
+
+    await message.answer("✅ База даних оновлена!", reply_markup=updated_menu)
+
+
+@dp.message(F.text == "🔄 Оновити базу")
+async def update_db_button_handler(message: Message):
+    """Обробник кнопки '🔄 Оновити базу'"""
+    await update_db_handler(message)
 
 
 @dp.message(F.text == "📊 Загальний баланс")
-async def total_balance_button(message: Message):
-    if not await check_access(message):
-        return
-    if not await is_admin(message.from_user.id):
-        await message.answer("❌ У вас немає прав для цієї команди.")
-    await total_balance_handler(message)
-
-
-@dp.message(lambda message: message.text == "📊 Загальний баланс")
 async def total_balance_button(message: Message):
     if not await check_access(message):
         return

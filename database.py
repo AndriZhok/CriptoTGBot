@@ -4,30 +4,33 @@ DB_NAME = "wallets.db"
 DATABASE_PATH = "wallets.db"
 
 async def init_db():
-    """Створює таблиці, якщо вони ще не існують"""
+    """Ініціалізує базу даних і створює необхідні таблиці"""
     async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute(
-            """
-        CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY,
-            is_admin INTEGER DEFAULT 0,
-            subscribed INTEGER DEFAULT 0,
-            is_approved INTEGER DEFAULT 0
-        )
-        """
-        )
-        await db.execute(
-            """
-        CREATE TABLE IF NOT EXISTS wallets (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            name TEXT NOT NULL,
-            address TEXT NOT NULL UNIQUE,
-            last_balance REAL DEFAULT 0
-        )
-        """
-        )
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY, 
+                name TEXT,
+                is_approved INTEGER DEFAULT 0
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS wallets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                name TEXT,
+                address TEXT UNIQUE,
+                balance REAL DEFAULT 0,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS subscribers (
+                user_id INTEGER PRIMARY KEY,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        """)
         await db.commit()
+        print("✅ База даних ініціалізована!")
 
 
 async def add_wallet(user_id: int, name: str, address: str):
