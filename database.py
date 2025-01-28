@@ -262,3 +262,16 @@ async def ensure_default_admin():
             (DEFAULT_ADMIN_ID, 1),
         )
         await db.commit()
+
+
+async def get_wallets(user_id, is_admin):
+    async with aiosqlite.connect(DB_NAME) as db:
+        if is_admin:
+            query = "SELECT name, address FROM wallets;"
+            params = ()
+        else:
+            query = "SELECT name, address FROM wallets WHERE user_id = ?;"
+            params = (user_id,)
+
+        async with db.execute(query, params) as cursor:
+            return await cursor.fetchall()

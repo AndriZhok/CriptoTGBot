@@ -33,7 +33,7 @@ from database import (
     approve_user,
     remove_subscriber,
     is_user_subscribed,
-    ensure_default_admin,
+    ensure_default_admin, get_wallets,
 )
 
 load_dotenv()
@@ -152,26 +152,47 @@ def get_usdt_balance(wallet_address):
         return 0
 
 
+@dp.message(F.text == "💰 Баланс")
 async def balance_handler(message: Message):
-    """Показує баланс користувача у USDT"""
+    """Показує баланс користувача у USDT (для звичайного користувача) або баланс усіх гаманців (для адміна)"""
     if not await check_access(message):
         return
 
     user_id = message.from_user.id
-    wallets = await get_user_wallets(user_id)
+    is_admins = await is_admin(user_id)
+
+    # Якщо користувач - адмін, отримує всі гаманці
+    wallets = await get_all_wallets() if is_admins else await get_user_wallets(user_id)
 
     if not wallets:
         await message.answer("⚠️ У вас немає збережених гаманців.")
         return
 
-    for name, address, last_balance in wallets:
-        balance = get_usdt_balance(address)
-        await update_balance(address, balance)
+    header = "📊 **Ваші гаманці та їх баланс:**\n" if not is_admins else "📊 **Всі гаманці та їх баланс:**\n"
+    messages = [header]
+    total_balance = 0
 
-        await message.answer(
-            f"📌 **{name}**\n" f"📍 `{address}`\n" f"💰 {balance:.2f} USDT",
-            parse_mode="Markdown",
-        )
+    for name, address, last_balance in wallets:
+        total_balance += last_balance
+        wallet_info = f"📌 **{name}**\n📍 `{address}`\n💰 {last_balance:.2f} USDT\n\n"
+
+        # Перевіряємо, чи не перевищить довжина повідомлення ліміт у 4096 символів
+        if len(messages[-1]) + len(wallet_info) > 4000:
+            messages.append("")  # Створюємо новий блок для повідомлення
+
+        messages[-1] += wallet_info
+
+    # Додаємо загальний баланс у фінальне повідомлення
+    total_balance_message = f"\n💰 **Загальний баланс:** {total_balance:.2f} USDT"
+
+    if len(messages[-1]) + len(total_balance_message) > 4000:
+        messages.append(total_balance_message)
+    else:
+        messages[-1] += total_balance_message
+
+    # Відправляємо всі частини повідомлення по черзі
+    for msg in messages:
+        await message.answer(msg, parse_mode="Markdown")
 
 
 @dp.message(Command("add_wallet"))
@@ -225,19 +246,30 @@ async def copy_add_wallet_callback(callback_query):
 
 
 @dp.message(Command("wallets"))
+@dp.message(F.text == "📋 Мої гаманці")
 async def wallets_handler(message: Message):
-    """Відображає список гаманців користувача з балансом з БД (без запиту до API)"""
+    """Відображає список гаманців користувача з балансом з БД"""
     if not await check_access(message):
         return
 
     user_id = message.from_user.id
-    wallets = await get_user_wallets(user_id)
+    is_admins = await is_admin(user_id)
+
+    wallets = await get_wallets(user_id, is_admins)
 
     if not wallets:
         await message.answer("⚠️ У вас немає збережених гаманців.")
         return
 
-    for name, address, last_balance in wallets:
+    response = "📜 **Список гаманців:**\n"
+
+    for wallet in wallets:
+        if len(wallet) == 3:
+            name, address, last_balance = wallet
+        elif len(wallet) == 2:
+            name, address = wallet
+            last_balance = 0
+
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
@@ -249,7 +281,9 @@ async def wallets_handler(message: Message):
         )
 
         await message.answer(
-            f"📌 **{name}**\n" f"📍 `{address}`\n" f"💰 {last_balance:.2f} USDT",
+            f"📌 **{name}**\n"
+            f"📍 `{address}`\n"
+            f"💰 {last_balance:.2f} USDT",
             reply_markup=keyboard,
             parse_mode="Markdown",
         )
@@ -511,34 +545,6 @@ async def approve_user_handler(message: Message):
     await message.answer(f"✅ Користувач `{user_id}` тепер має доступ до бота!")
 
 
-@dp.message(F.text == "📋 Мої гаманці")
-async def show_wallets(message: Message):
-    if not await check_access(message):
-        return
-    if not await is_admin(message.from_user.id):
-        await message.answer("❌ У вас немає прав для цієї команди.")
-        return
-    await wallets_handler(message)
-
-
-@dp.message(F.text == "💰 Баланс")
-async def show_balance(message: Message):
-    """Відображає баланс користувача з бази, не запитуючи API"""
-    if not await check_access(message):
-        return
-
-    user_id = message.from_user.id
-    wallets = await get_user_wallets(user_id)
-
-    if not wallets:
-        await message.answer("⚠️ У вас немає збережених гаманців.")
-        return
-
-    for name, address, last_balance in wallets:
-        await message.answer(
-            f"📌 **{name}**\n" f"📍 `{address}`\n" f"💰 {last_balance:.2f} USDT",
-            parse_mode="Markdown",
-        )
 
 
 @dp.message(Command("update_db"))
